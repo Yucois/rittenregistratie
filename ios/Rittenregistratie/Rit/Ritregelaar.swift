@@ -14,6 +14,7 @@ final class Ritregelaar: ObservableObject {
     @Published private(set) var meting: Ritmeting?
 
     private var wachtTaak: Task<Void, Never>?
+    private var zoektStartadres = false
     private var laatstBewaard = Date.distantPast
     private var achtergrondtaak: UIBackgroundTaskIdentifier = .invalid
 
@@ -59,7 +60,9 @@ final class Ritregelaar: ObservableObject {
                 meting?.autoWegSinds = Date()
                 bewaarMeting(direct: true)
             }
-            if gebeurtenis == .appGestart { Locatie.shared.start() }
+            // Het meten laten doorlopen houdt de app wakker tijdens het wachten,
+            // ook als iOS hem eerder had gestopt.
+            Locatie.shared.start()
             plan(over: seconden)
         case .afronden:
             await rondAf()
@@ -124,6 +127,18 @@ final class Ritregelaar: ObservableObject {
     private func ontvang(_ positie: Positie) {
         guard meting != nil else { return }
         if meting?.verwerk(positie) == true { bewaarMeting(direct: false) }
+        // Kwam er bij het vertrek nog geen positie (parkeergarage), dan geldt de eerste goede.
+        if meting?.startAdres.isEmpty == true, let start = meting?.start, !zoektStartadres {
+            zoektStartadres = true
+            Task {
+                let adres = await Adreszoeker.adres(start)
+                zoektStartadres = false
+                if meting?.startAdres.isEmpty == true {
+                    meting?.startAdres = adres
+                    bewaarMeting(direct: true)
+                }
+            }
+        }
     }
 
     private func plan(over seconden: TimeInterval) {

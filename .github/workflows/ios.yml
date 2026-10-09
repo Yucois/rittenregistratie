@@ -116,7 +116,12 @@ jobs:
             MARKETING_VERSION="$VERSIE" CURRENT_PROJECT_VERSION="$BOUWNUMMER" \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
             build 2>&1 | tee ../toestelbouw.log | grep -E "error:|BUILD" || true
-          test -d ../bouw/toestel/Build/Products/Release-iphoneos/Rittenregistratie.app
+          APP=../bouw/toestel/Build/Products/Release-iphoneos/Rittenregistratie.app
+          test -d "$APP"
+          # Zonder deze metadata ziet Opdrachten de acties Rit begint en Rit eindigt niet.
+          test -d "$APP/Metadata.appintents" || { echo "::error::Geen App Intents-metadata in de app"; exit 1; }
+          grep -o '"RitBegintIntent"\|"RitEindigtIntent"' -r "$APP/Metadata.appintents" | sort -u
+          plutil -p "$APP/Info.plist" | grep -E "UIBackgroundModes|NSLocation|CFBundle(Short)?Version" -A 2
 
       # Een .ipa is een zip met de app in de map Payload. Hij is niet
       # ondertekend: SideStore of AltStore ondertekent hem bij het installeren
