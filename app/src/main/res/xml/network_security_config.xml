@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    De app praat alleen met een adres dat je zelf invult: je eigen Home
+    Assistant. Die draait vaak op het thuisnetwerk zonder certificaat, vandaar
+    dat gewoon http is toegestaan. Bereik je Home Assistant van buitenaf, gebruik
+    dan https.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

@@ -1,0 +1,100 @@
+name: Bouwen en uitgeven
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bouwen:
+    name: Tests, APK en release
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - run: chmod +x gradlew
+
+      - name: Fiscale rekenregels testen
+        run: ./gradlew :kern:test
+
+      # De vaste sleutel staat als geheim in de repository, niet in de code.
+      # Zonder die sleutel is een nieuwe versie niet over een oude heen te installeren.
+      - name: Sleutel klaarzetten
+        if: github.event_name != 'pull_request'
+        env:
+          SLEUTEL: ${{ secrets.ONDERTEKENSLEUTEL }}
+        run: |
+          if [ -n "$SLEUTEL" ]; then
+            echo "$SLEUTEL" | base64 -d > app/rittenregistratie-debug.keystore
+          else
+            echo "::warning::Geen ondertekensleutel gevonden; er wordt geen release gemaakt."
+          fi
+
+      - name: App bouwen
+        env:
+          VERSIECODE: ${{ github.run_number }}
+        run: |
+          set -o pipefail
+          ./gradlew :app:assembleDebug --console=plain 2>&1 | tee bouw.log || {
+            echo "::group::Compileerfouten"
+            grep -E "^e: |^w: .*: error:|FAILURE|What went wrong" -A 2 bouw.log | tail -80
+            echo "::endgroup::"
+            exit 1
+          }
+
+      - name: APK een leesbare naam geven
+        run: |
+          mkdir -p uitgifte
+          cp app/build/outputs/apk/debug/app-debug.apk uitgifte/rittenregistratie.apk
+
+      - name: APK bewaren
+        uses: actions/upload-artifact@v4
+        with:
+          name: rittenregistratie-apk
+          path: uitgifte/rittenregistratie.apk
+          if-no-files-found: error
+
+      - name: Release maken
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && hashFiles('app/rittenregistratie-debug.keystore') != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSIE="1.0.${{ github.run_number }}"
+          cat > notitie.md <<NOTITIE
+          Versie $VERSIE, gebouwd uit commit ${GITHUB_SHA:0:7}.
+
+          **Installeren op je telefoon**
+          1. Tik hieronder bij *Assets* op **rittenregistratie.apk**.
+          2. Chrome waarschuwt voor het bestandstype: tik *Toch downloaden*.
+          3. Open het bestand en sta installeren toe als Android daarom vraagt.
+          4. Play Protect waarschuwt voor een onbekende app: tik *Toch installeren*.
+
+          Heb je de app al? Installeer deze versie er gewoon overheen; je ritten blijven staan.
+          NOTITIE
+          gh release create "v$VERSIE" uitgifte/rittenregistratie.apk \
+            --title "Rittenregistratie $VERSIE" \
+            --notes-file notitie.md \
+            --target "$GITHUB_SHA" \
+            --latest
+
+      - name: Testrapport bewaren
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: testrapport
+          path: kern/build/reports/tests/test
+          if-no-files-found: ignore

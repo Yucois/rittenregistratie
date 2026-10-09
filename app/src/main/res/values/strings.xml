@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_naam">Rittenregistratie</string>
+    <string name="kanaal_rit_naam">Lopende rit</string>
+    <string name="kanaal_rit_uitleg">Toont dat een rit wordt bijgehouden.</string>
+    <string name="kanaal_bevestigen_naam">Rit bevestigen</string>
+    <string name="kanaal_bevestigen_uitleg">Vraagt na een automatisch vastgelegde rit om het karakter.</string>
+</resources>

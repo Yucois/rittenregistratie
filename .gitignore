@@ -1,0 +1,12 @@
+.gradle/
+.kotlin/
+build/
+local.properties
+*.iml
+.idea/
+captures/
+.externalNativeBuild/
+.cxx/
+# De ondertekeningssleutel staat als geheim in GitHub Actions, nooit in de repository.
+*.keystore
+*.jks
