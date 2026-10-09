@@ -1,0 +1,60 @@
+# Het Xcode-project wordt hieruit gemaakt met XcodeGen (in de workflow), zodat
+# er geen onleesbaar projectbestand in versiebeheer staat.
+name: Rittenregistratie
+options:
+  bundleIdPrefix: nl.exitinflex
+  deploymentTarget:
+    iOS: "17.0"
+  developmentLanguage: nl
+packages:
+  RittenKern:
+    path: RittenKern
+settings:
+  base:
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+targets:
+  Rittenregistratie:
+    type: application
+    platform: iOS
+    sources:
+      - path: Rittenregistratie
+    dependencies:
+      - package: RittenKern
+    info:
+      path: Rittenregistratie/Info.plist
+      properties:
+        CFBundleDisplayName: Ritten
+        CFBundleDevelopmentRegion: nl
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSRequiresIPhoneOS: true
+        UILaunchScreen: {}
+        UIApplicationSupportsIndirectInputEvents: true
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIBackgroundModes: [location]
+        ITSAppUsesNonExemptEncryption: false
+        NSLocationWhenInUseUsageDescription: "Om je ritten te meten: waar je vertrekt, waar je aankomt en hoe ver je rijdt."
+        NSLocationAlwaysAndWhenInUseUsageDescription: "Om je ritten te meten terwijl je telefoon op slot zit. De app meet alleen tijdens een rit; je locatie blijft op je telefoon."
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: nl.exitinflex.rittenregistratie
+        PRODUCT_NAME: Rittenregistratie
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_PREVIEWS: NO
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGN_IDENTITY: ""
+        DEVELOPMENT_TEAM: ""
+schemes:
+  Rittenregistratie:
+    build:
+      targets:
+        Rittenregistratie: all
+    run:
+      config: Debug
+    archive:
+      config: Release

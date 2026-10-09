@@ -1,0 +1,199 @@
+name: iPhone-app
+
+on:
+  push:
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios.yml"
+  pull_request:
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  bouwen:
+    name: Tests, simulator en ipa
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      VERSIE: 1.0.${{ github.run_number }}
+      BOUWNUMMER: ${{ github.run_number }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Xcode
+        run: |
+          xcodebuild -version
+          xcrun simctl list runtimes | grep -i ios || true
+
+      - name: Fiscale rekenregels testen
+        working-directory: ios/RittenKern
+        run: swift test 2>&1 | tee ../../kerntest.log
+
+      - name: Xcode-project maken
+        working-directory: ios
+        run: |
+          brew install xcodegen >/dev/null
+          xcodegen generate
+
+      - name: Bouwen voor de simulator
+        working-directory: ios
+        run: |
+          set -o pipefail
+          xcodebuild -project Rittenregistratie.xcodeproj -scheme Rittenregistratie \
+            -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath ../bouw/sim \
+            MARKETING_VERSION="$VERSIE" CURRENT_PROJECT_VERSION="$BOUWNUMMER" \
+            build 2>&1 | tee ../simbouw.log | grep -E "error:|warning: .*deprecated|BUILD" || true
+          test -d ../bouw/sim/Build/Products/Debug-iphonesimulator/Rittenregistratie.app
+
+      - name: Compileerfouten
+        if: failure()
+        run: grep -E "error:" -A 3 simbouw.log | head -120 || true
+
+      # Start de app echt op een gesimuleerde iPhone en maakt van elk scherm een
+      # afdruk. Zo valt een crash bij het starten op voordat iemand de app installeert.
+      - name: Starten in de simulator
+        run: |
+          set -e
+          APP=bouw/sim/Build/Products/Debug-iphonesimulator/Rittenregistratie.app
+          ID=nl.exitinflex.rittenregistratie
+          TOESTEL=$(xcrun simctl list devices available -j | python3 -c '
+          import json,sys
+          d=json.load(sys.stdin)["devices"]
+          kandidaten=[t for r,ts in d.items() if "iOS" in r for t in ts if t["name"].startswith("iPhone")]
+          print(kandidaten[-1]["udid"])')
+          echo "Toestel: $TOESTEL"
+          xcrun simctl boot "$TOESTEL"
+          xcrun simctl bootstatus "$TOESTEL" -b
+          xcrun simctl install "$TOESTEL" "$APP"
+          mkdir -p afdrukken
+          xcrun simctl launch "$TOESTEL" "$ID"
+          sleep 8
+          xcrun simctl io "$TOESTEL" screenshot afdrukken/0-eerste-start.png
+          xcrun simctl terminate "$TOESTEL" "$ID"
+          xcrun simctl privacy "$TOESTEL" grant location-always "$ID" || true
+          for TAB in 0 1 2; do
+            xcrun simctl launch "$TOESTEL" "$ID" -demo -tab "$TAB"
+            sleep 6
+            xcrun simctl io "$TOESTEL" screenshot "afdrukken/$((TAB + 1))-scherm-$TAB.png"
+            # Draait hij nog? Een crash na het starten valt hier op.
+            xcrun simctl spawn "$TOESTEL" launchctl list | grep -q "$ID" || { echo "::error::De app is gestopt na het starten"; exit 1; }
+            xcrun simctl terminate "$TOESTEL" "$ID"
+          done
+
+      - name: Afdrukken bewaren
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: iphone-afdrukken
+          path: afdrukken
+          if-no-files-found: ignore
+
+      - name: Bouwen voor de iPhone
+        working-directory: ios
+        run: |
+          set -o pipefail
+          xcodebuild -project Rittenregistratie.xcodeproj -scheme Rittenregistratie \
+            -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath ../bouw/toestel \
+            MARKETING_VERSION="$VERSIE" CURRENT_PROJECT_VERSION="$BOUWNUMMER" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build 2>&1 | tee ../toestelbouw.log | grep -E "error:|BUILD" || true
+          test -d ../bouw/toestel/Build/Products/Release-iphoneos/Rittenregistratie.app
+
+      # Een .ipa is een zip met de app in de map Payload. Hij is niet
+      # ondertekend: SideStore of AltStore ondertekent hem bij het installeren
+      # met het Apple-account van wie hem installeert.
+      - name: Ipa maken
+        run: |
+          mkdir -p uitgifte/Payload
+          cp -R bouw/toestel/Build/Products/Release-iphoneos/Rittenregistratie.app uitgifte/Payload/
+          (cd uitgifte && zip -qry rittenregistratie.ipa Payload && rm -rf Payload)
+          ls -l uitgifte
+
+      - name: Ipa bewaren
+        uses: actions/upload-artifact@v4
+        with:
+          name: rittenregistratie-ipa
+          path: uitgifte/rittenregistratie.ipa
+          if-no-files-found: error
+
+      # Eén vaste release met tag "ios", als voorversie gemarkeerd: zo blijft de
+      # Android-link naar de laatste release gewoon naar de Android-app wijzen.
+      # bron.json is de bron die je één keer in SideStore toevoegt; daarna ziet
+      # SideStore zelf wanneer er een nieuwe versie is.
+      - name: Release bijwerken
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -e
+          GROOTTE=$(stat -f%z uitgifte/rittenregistratie.ipa)
+          DATUM=$(date -u +%Y-%m-%d)
+          python3 - "$VERSIE" "$BOUWNUMMER" "$DATUM" "$GROOTTE" "$REPO" > uitgifte/bron.json <<'PY'
+          import json, sys
+          versie, bouw, datum, grootte, repo = sys.argv[1:]
+          basis = f"https://github.com/{repo}"
+          icoon = f"https://raw.githubusercontent.com/{repo}/main/ios/Rittenregistratie/Assets.xcassets/AppIcon.appiconset/icoon.png"
+          print(json.dumps({
+              "name": "Rittenregistratie",
+              "identifier": "nl.exitinflex.rittenregistratie.bron",
+              "subtitle": "Ritten voor de auto van de zaak",
+              "description": "Automatische rittenregistratie voor de Verklaring geen privégebruik auto.",
+              "iconURL": icoon,
+              "website": basis,
+              "tintColor": "#0B2B3C",
+              "apps": [{
+                  "name": "Rittenregistratie",
+                  "bundleIdentifier": "nl.exitinflex.rittenregistratie",
+                  "developerName": "Rittenregistratie",
+                  "subtitle": "Ritten voor de auto van de zaak",
+                  "localizedDescription": "Legt ritten vanzelf vast zodra je iPhone verbinding maakt met je auto, en vraagt na afloop met één tik of het zakelijk, woon-werk of privé was. Bewaakt de 500 privékilometers en de sluitendheid van de reeks.",
+                  "iconURL": icoon,
+                  "tintColor": "#0B2B3C",
+                  "category": "utilities",
+                  "versions": [{
+                      "version": versie,
+                      "buildVersion": bouw,
+                      "date": datum,
+                      "localizedDescription": f"Versie {versie}.",
+                      "downloadURL": f"{basis}/releases/download/ios/rittenregistratie.ipa",
+                      "size": int(grootte),
+                      "minOSVersion": "17.0",
+                  }],
+                  "appPermissions": {
+                      "entitlements": [],
+                      "privacy": {
+                          "NSLocationWhenInUseUsageDescription": "Om je ritten te meten: waar je vertrekt, waar je aankomt en hoe ver je rijdt.",
+                          "NSLocationAlwaysAndWhenInUseUsageDescription": "Om je ritten te meten terwijl je telefoon op slot zit.",
+                      },
+                  },
+              }],
+              "news": [],
+          }, ensure_ascii=False, indent=2))
+          PY
+          cat > notitie.md <<EOF
+          iPhone-versie $VERSIE, gebouwd uit commit ${GITHUB_SHA:0:7}.
+
+          **Installeren** gaat via SideStore (gratis, met je eigen Apple-account):
+          voeg in SideStore deze bron toe:
+
+          \`https://github.com/$REPO/releases/download/ios/bron.json\`
+
+          De volledige uitleg staat in de README onder *iPhone*.
+          EOF
+          if gh release view ios >/dev/null 2>&1; then
+            gh release upload ios uitgifte/rittenregistratie.ipa uitgifte/bron.json --clobber
+            gh release edit ios --title "Rittenregistratie voor iPhone $VERSIE" --notes-file notitie.md --prerelease --latest=false
+          else
+            gh release create ios uitgifte/rittenregistratie.ipa uitgifte/bron.json \
+              --title "Rittenregistratie voor iPhone $VERSIE" --notes-file notitie.md \
+              --prerelease --latest=false --target "$GITHUB_SHA"
+          fi

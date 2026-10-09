@@ -10,3 +10,10 @@ captures/
 # De ondertekeningssleutel staat als geheim in GitHub Actions, nooit in de repository.
 *.keystore
 *.jks
+
+# iPhone-app: het Xcode-project wordt door XcodeGen gemaakt
+ios/*.xcodeproj
+ios/Rittenregistratie/Info.plist
+ios/RittenKern/.build/
+ios/RittenKern/.swiftpm/
+bouw/

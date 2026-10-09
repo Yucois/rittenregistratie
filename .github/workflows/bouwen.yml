@@ -3,7 +3,17 @@ name: Bouwen en uitgeven
 on:
   push:
     branches: [main]
+    # De iPhone-versie heeft een eigen workflow; een wijziging daaraan is
+    # geen nieuwe Android-versie.
+    paths-ignore:
+      - "ios/**"
+      - ".github/workflows/ios.yml"
+      - "*.md"
+      - "docs/**"
   pull_request:
+    paths-ignore:
+      - "ios/**"
+      - ".github/workflows/ios.yml"
   workflow_dispatch:
 
 permissions:
