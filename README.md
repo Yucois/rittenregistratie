@@ -1,6 +1,6 @@
 # Rittenregistratie
 
-Een Android-app die de ritten met je auto van de zaak automatisch bijhoudt,
+Een app voor Android en iPhone die de ritten met je auto van de zaak automatisch bijhoudt,
 zodat je met een **Verklaring geen privégebruik auto** kunt aantonen dat je
 per jaar niet meer dan 500 km privé rijdt.
 
@@ -9,7 +9,8 @@ per jaar niet meer dan 500 km privé rijdt.
 **[Download de nieuwste versie](https://github.com/Yucois/rittenregistratie/releases/latest/download/rittenregistratie.apk)**
 · [alle versies](https://github.com/Yucois/rittenregistratie/releases)
 
-Werkt op Android 8 of nieuwer. Niet op een iPhone.
+Werkt op Android 8 of nieuwer. **iPhone?** Zie [docs/iphone.md](docs/iphone.md):
+die versie installeer je gratis via SideStore, met je eigen Apple-account.
 
 ## Installeren
 
@@ -63,6 +64,7 @@ gereden route als die afwijkt, en het karakter van de rit. Zie
 ```bash
 ./gradlew :kern:test           # fiscale rekenregels, draait zonder Android SDK
 ./gradlew :app:assembleDebug   # APK in app/build/outputs/apk/debug/
+cd ios/RittenKern && swift test   # dezelfde rekenregels in Swift (macOS)
 ```
 
 - `kern/` is gewone Kotlin zonder Android: model, controle op sluitendheid,
@@ -77,5 +79,13 @@ gereden route als die afwijkt, en het karakter van de rit. Zie
 - Elke push naar `main` bouwt een nieuwe versie en zet die als release klaar.
   Ondertekend wordt met een vaste sleutel uit het geheim `ONDERTEKENSLEUTEL`;
   zonder dat geheim wordt er geen release gemaakt.
+- `ios/` is de iPhone-versie (SwiftUI). `ios/RittenKern` is de vertaling van
+  `kern/` naar Swift met dezelfde testgevallen; een back-up is uitwisselbaar
+  tussen beide versies. Een iPhone-app mag de bluetooth van de auto niet zelf
+  volgen, dus het signaal komt van een automatisering in Opdrachten die de
+  acties *Rit begint* en *Rit eindigt* aanroept. Het Xcode-project maakt
+  XcodeGen uit `ios/project.yml`. De workflow `iPhone-app` test, start de app
+  in een simulator, bouwt een niet-ondertekende `.ipa` en zet die met een
+  SideStore-bron onder de release met tag `ios`.
 - Kilometerstand rechtstreeks uit de auto, via Home Assistant:
   [docs/kilometerstand-uit-de-auto.md](docs/kilometerstand-uit-de-auto.md).

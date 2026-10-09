@@ -95,6 +95,17 @@ jobs:
           path: afdrukken
           if-no-files-found: ignore
 
+      # Ook als release-bestand, zodat ze zonder inloggen te bekijken zijn.
+      - name: Afdrukken publiceren
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view ios-afdrukken >/dev/null 2>&1 || \
+            gh release create ios-afdrukken --prerelease --latest=false --target "$GITHUB_SHA" \
+              --title "Schermafdrukken iPhone-app" --notes "Afdrukken uit de simulator van de laatste build. Niet om te installeren."
+          gh release upload ios-afdrukken afdrukken/*.png --clobber
+
       - name: Bouwen voor de iPhone
         working-directory: ios
         run: |
@@ -137,6 +148,8 @@ jobs:
           set -e
           GROOTTE=$(stat -f%z uitgifte/rittenregistratie.ipa)
           DATUM=$(date -u +%Y-%m-%d)
+          # Geen buildVersion of marketplaceID in de bron: daaraan herkent SideStore een
+          # genotariseerde bron, en die weigert hij dan toe te voegen.
           python3 - "$VERSIE" "$BOUWNUMMER" "$DATUM" "$GROOTTE" "$REPO" > uitgifte/bron.json <<'PY'
           import json, sys
           versie, bouw, datum, grootte, repo = sys.argv[1:]
@@ -161,7 +174,6 @@ jobs:
                   "category": "utilities",
                   "versions": [{
                       "version": versie,
-                      "buildVersion": bouw,
                       "date": datum,
                       "localizedDescription": f"Versie {versie}.",
                       "downloadURL": f"{basis}/releases/download/ios/rittenregistratie.ipa",
